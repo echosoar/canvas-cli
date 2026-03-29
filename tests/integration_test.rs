@@ -331,51 +331,6 @@ fn arc_stroke_circle() {
         "point on circle circumference should be drawn");
 }
 
-// ── fill_text / stroke_text ───────────────────────────────────────────────────
-
-#[test]
-fn fill_text_draws_pixels() {
-    let canvas = Canvas::new(100, 20);
-    let mut ctx = canvas.get_context("2d").unwrap();
-    ctx.set_fill_style("black");
-    ctx.fill_text("A", 10.0, 6.0);
-    let img = canvas.get_image_data();
-
-    // 'A' is 8 pixels wide, some pixel in the glyph region should be black.
-    let mut found = false;
-    for py in 6..14usize {
-        for px in 10..18usize {
-            let c = img.get_pixel(px as u32, py as u32);
-            if c.a > 0 {
-                found = true;
-                break;
-            }
-        }
-    }
-    assert!(found, "fill_text('A') should draw at least one pixel");
-}
-
-#[test]
-fn stroke_text_draws_pixels() {
-    let canvas = Canvas::new(100, 20);
-    let mut ctx = canvas.get_context("2d").unwrap();
-    ctx.set_stroke_style("red");
-    ctx.stroke_text("B", 10.0, 4.0);
-    let img = canvas.get_image_data();
-
-    let mut found = false;
-    for py in 4..14usize {
-        for px in 10..18usize {
-            let c = img.get_pixel(px as u32, py as u32);
-            if c.r > 0 && c.a > 0 {
-                found = true;
-                break;
-            }
-        }
-    }
-    assert!(found, "stroke_text('B') should draw at least one red pixel");
-}
-
 // ── drawImage ────────────────────────────────────────────────────────────────
 
 #[test]

@@ -28,7 +28,6 @@
 
 pub mod canvas;
 pub mod color;
-pub mod font;
 pub mod image;
 pub mod path;
 pub mod png;

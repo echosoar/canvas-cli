@@ -292,38 +292,6 @@ impl Context2D {
     }
 }
 
-// ─── Text methods ─────────────────────────────────────────────────────────────
-
-impl Context2D {
-    /// Fill `text` starting at `(x, y)` with `fillStyle`.
-    ///
-    /// `(x, y)` is the top-left corner of the first glyph cell.
-    /// The embedded bitmap font is 8×8 pixels per character.
-    pub fn fill_text(&mut self, text: &str, x: f64, y: f64) {
-        let color = self.fill_style;
-        render::fill_text(
-            &mut self.buffer.borrow_mut(),
-            self.width,
-            self.height,
-            text, x, y, color,
-            &self.clip,
-        );
-    }
-
-    /// Stroke the outline of `text` starting at `(x, y)` with `strokeStyle`.
-    pub fn stroke_text(&mut self, text: &str, x: f64, y: f64) {
-        let color = self.stroke_style;
-        let lw = self.line_width;
-        render::stroke_text(
-            &mut self.buffer.borrow_mut(),
-            self.width,
-            self.height,
-            text, x, y, color, lw,
-            &self.clip,
-        );
-    }
-}
-
 // ─── Image methods ────────────────────────────────────────────────────────────
 
 impl Context2D {
