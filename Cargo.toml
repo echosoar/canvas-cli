@@ -1,6 +1,9 @@
 [package]
 name = "canvas-rs"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 
 [dependencies]
+
+[dev-dependencies]
+png = "0.17"

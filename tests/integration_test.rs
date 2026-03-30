@@ -499,3 +499,63 @@ fn base64_round_trip() {
     let encoded = base64_encode(original);
     assert_eq!(encoded, "SGVsbG8sIFdvcmxkIQ==");
 }
+
+// ── fill_rect + draw image from file ─────────────────────────────────────────
+
+/// Decode a PNG file from `path` and return it as an `ImageData` (RGBA).
+fn load_png_rgba(path: &str) -> ImageData {
+    let file = std::fs::File::open(path).expect("could not open PNG file");
+    let decoder = png::Decoder::new(file);
+    let mut reader = decoder.read_info().expect("could not read PNG info");
+    let mut buf = vec![0u8; reader.output_buffer_size()];
+    let frame = reader.next_frame(&mut buf).expect("could not decode PNG frame");
+    let bytes = buf[..frame.buffer_size()].to_vec();
+    let (w, h) = (frame.width, frame.height);
+    let rgba = match frame.color_type {
+        png::ColorType::Rgba => bytes,
+        png::ColorType::Rgb => bytes
+            .chunks(3)
+            .flat_map(|p| [p[0], p[1], p[2], 255u8])
+            .collect(),
+        _ => panic!("unsupported PNG color type: {:?}", frame.color_type),
+    };
+    ImageData::from_rgba(w, h, rgba)
+}
+
+#[test]
+fn fill_rect_green_then_draw_image() {
+    let canvas = Canvas::new(300, 300);
+    let mut ctx = canvas.get_context("2d").unwrap();
+
+    // Draw green rectangle (CSS "green" = rgb(0, 128, 0)).
+    ctx.set_fill_style("green");
+    ctx.fill_rect(10.0, 10.0, 150.0, 100.0);
+
+    // Verify the rectangle is painted before the image is drawn on top.
+    let snapshot = canvas.get_image_data();
+    let green_px = snapshot.get_pixel(50, 50);
+    assert_eq!(green_px.r, 0,   "green rect r should be 0");
+    assert_eq!(green_px.g, 128, "green rect g should be 128");
+    assert_eq!(green_px.b, 0,   "green rect b should be 0");
+    assert_eq!(green_px.a, 255, "green rect should be fully opaque");
+
+    // Pixel outside the rect should still be transparent at this point.
+    let outside_snap = snapshot.get_pixel(5, 5);
+    assert_eq!(outside_snap.a, 0, "pixel outside rect should be transparent before image draw");
+
+    // Load tests/image_220x200.png and draw it on top of the canvas.
+    let img_data = load_png_rgba("tests/image_220x200.png");
+    assert_eq!(img_data.width,  220, "loaded image width should be 220");
+    assert_eq!(img_data.height, 200, "loaded image height should be 200");
+    ctx.draw_image(&img_data, 0.0, 0.0);
+
+    // After drawing, a pixel outside both the image (220×200) and the green
+    // rect should still be transparent.
+    let result = canvas.get_image_data();
+    let far_px = result.get_pixel(260, 260);
+    assert_eq!(far_px.a, 0, "pixel outside image and rect should remain transparent");
+
+    // The canvas should export to a valid PNG data URL without panicking.
+    let url = canvas.to_data_url();
+    assert!(url.starts_with("data:image/png;base64,"), "export should produce a valid PNG data URL");
+}
