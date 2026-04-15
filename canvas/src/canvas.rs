@@ -42,6 +42,8 @@ impl Canvas {
         if context_type != "2d" {
             return None;
         }
+        // Load common font as fallback
+        let common_font = Font::load("common").ok();
         Some(Context2D {
             buffer: Rc::clone(&self.buffer),
             width: self.width,
@@ -53,6 +55,7 @@ impl Canvas {
             path: Path::new(),
             clip: None,
             font: None,
+            common_font,
             font_size: 32,
             font_family: "common".to_string(),
             font_style: String::new(),
@@ -99,6 +102,7 @@ pub struct Context2D {
 
     // ── Font ───────────────────────────────────────────────────
     font: Option<Font>,
+    common_font: Option<Font>,  // Fallback font for characters not in main font
     font_size: u32,
     font_family: String,
     font_style: String,  // bold, italic, etc.
@@ -384,84 +388,127 @@ impl Context2D {
     /// Fill text at position `(x, y)` using the current `fillStyle` and font settings.
     ///
     /// The text is rendered using the loaded font bitmap, scaled to the current
-    /// `font_size`. Characters not found in the font are skipped.
+    /// `font_size`. Characters not found in the font will fallback to common font.
     pub fn fill_text(&mut self, text: &str, x: f64, y: f64) {
+        println!("fill_text: '{}' at ({}, {}) with font '{}'", text, x, y, self.font_string);
         self.ensure_font_loaded();
 
-        if let Some(font) = &self.font {
-            let color = self.fill_style;
-            let (bitmap, _text_width, _text_height) = font.render_text(text, self.font_size);
+        // Determine which font to use as primary, and common_font as fallback
+        let primary_font = self.font.as_ref().or(self.common_font.as_ref());
 
-            if bitmap.is_empty() {
-                return;
-            }
+        println!("Primary font: {:?}, Common font: {:?}", primary_font.as_ref().map(|f| &f.config), self.common_font.as_ref().map(|f| &f.config));
+        if primary_font.is_none() {
+            return;
+        }
 
-            // Draw each pixel of the text bitmap
-            let mut buf = self.buffer.borrow_mut();
-            for (row_idx, row) in bitmap.iter().enumerate() {
-                for (col_idx, pixel) in row.iter().enumerate() {
-                    if *pixel {
-                        let px = x as i64 + col_idx as i64;
-                        let py = y as i64 + row_idx as i64;
-                        render::put_pixel(
-                            &mut buf,
-                            self.width,
-                            self.height,
-                            px,
-                            py,
-                            color,
-                            &self.clip,
-                        );
+        let primary_font = primary_font.unwrap();
+        let color = self.fill_style;
+        let font_size = self.font_size;
+
+        // Calculate scale
+        let scale = font_size as f64 / primary_font.config.size as f64;
+        let scaled_height = (primary_font.config.size as f64 * scale).ceil() as u32;
+
+        let mut x_offset = x;
+
+        // Render each character with fallback
+        for ch in text.chars() {
+            // Try primary font first, then fallback to common_font
+            let char_bitmap = primary_font.get_char(ch)
+                .or_else(|| self.common_font.as_ref().and_then(|f| f.get_char(ch)));
+
+            if let Some(char_bm) = char_bitmap {
+                let scaled_width = (char_bm.width as f64 * scale).ceil() as usize;
+
+                // Draw the character
+                let mut buf = self.buffer.borrow_mut();
+                for dst_y in 0..scaled_height as usize {
+                    for dst_x in 0..scaled_width {
+                        let src_x = (dst_x as f64 / scale).round() as usize;
+                        let src_y = (dst_y as f64 / scale).round() as usize;
+
+                        if src_x < char_bm.width as usize && src_y < char_bm.height as usize {
+                            if char_bm.bitmap[src_y][src_x] {
+                                let px = x_offset as i64 + dst_x as i64;
+                                let py = y as i64 + dst_y as i64;
+                                render::put_pixel(
+                                    &mut buf,
+                                    self.width,
+                                    self.height,
+                                    px,
+                                    py,
+                                    color,
+                                    &self.clip,
+                                );
+                            }
+                        }
                     }
                 }
+
+                x_offset += scaled_width as f64;
+            } else if ch == ' ' {
+                // Space character not in font: default to half-width (size/2)
+                let half_width = primary_font.config.size / 2;
+                let scaled_width = (half_width as f64 * scale).ceil() as f64;
+                x_offset += scaled_width;
             }
         }
     }
 
     /// Fill text with maximum width constraint.
     /// If the text is wider than max_width, it will be scaled down to fit.
+    /// Characters not found in the font will fallback to common font.
     pub fn fill_text_with_max_width(&mut self, text: &str, x: f64, y: f64, max_width: f64) {
         self.ensure_font_loaded();
 
-        if let Some(font) = &self.font {
-            let (bitmap, original_width, _) = font.render_text(text, self.font_size);
+        // Determine which font to use as primary, and common_font as fallback
+        let primary_font = self.font.as_ref().or(self.common_font.as_ref());
+        if primary_font.is_none() {
+            return;
+        }
 
-            if bitmap.is_empty() || original_width == 0 {
-                return;
-            }
+        let primary_font = primary_font.unwrap();
+        let (bitmap, original_width, _) = primary_font.render_text_with_fallback(
+            text,
+            self.font_size,
+            self.common_font.as_ref(),
+        );
 
-            // Calculate scale factor if text exceeds max_width
-            let scale = if original_width as f64 > max_width {
-                max_width / original_width as f64
-            } else {
-                1.0
-            };
+        if bitmap.is_empty() || original_width == 0 {
+            return;
+        }
 
-            let color = self.fill_style;
-            let scaled_height = (bitmap.len() as f64 * scale).ceil() as usize;
-            let scaled_width = (bitmap[0].len() as f64 * scale).ceil() as usize;
+        // Calculate scale factor if text exceeds max_width
+        let scale = if original_width as f64 > max_width {
+            max_width / original_width as f64
+        } else {
+            1.0
+        };
 
-            // Draw scaled text
-            let mut buf = self.buffer.borrow_mut();
-            for dst_y in 0..scaled_height {
-                for dst_x in 0..scaled_width {
-                    // Nearest neighbor sampling
-                    let src_x = (dst_x as f64 / scale).round() as usize;
-                    let src_y = (dst_y as f64 / scale).round() as usize;
+        let color = self.fill_style;
+        let scaled_height = (bitmap.len() as f64 * scale).ceil() as usize;
+        let scaled_width = (bitmap[0].len() as f64 * scale).ceil() as usize;
 
-                    if src_y < bitmap.len() && src_x < bitmap[src_y].len() && bitmap[src_y][src_x] {
-                        let px = x as i64 + dst_x as i64;
-                        let py = y as i64 + dst_y as i64;
-                        render::put_pixel(
-                            &mut buf,
-                            self.width,
-                            self.height,
-                            px,
-                            py,
-                            color,
-                            &self.clip,
-                        );
-                    }
+        // Draw scaled text
+        let mut buf = self.buffer.borrow_mut();
+        for dst_y in 0..scaled_height {
+            for dst_x in 0..scaled_width {
+                // Nearest neighbor sampling
+                let src_x = (dst_x as f64 / scale).round() as usize;
+                let src_y = (dst_y as f64 / scale).round() as usize;
+
+                if src_y < bitmap.len() && src_x < bitmap[src_y].len() && bitmap[src_y][src_x] {
+                    let px = x as i64 + dst_x as i64;
+                    let py = y as i64 + dst_y as i64;
+                    render::put_pixel(
+                        &mut buf,
+                        self.width,
+                        self.height,
+                        px,
+                        py,
+                        color,
+                        &self.clip,
+                    );
                 }
             }
         }
@@ -469,11 +516,19 @@ impl Context2D {
 
     /// Measure text width with current font settings.
     /// Returns the width in pixels.
+    /// Characters not found in the font will fallback to common font.
     pub fn measure_text(&self, text: &str) -> f64 {
         // Need to temporarily load font for measurement
         let font = Font::load(&self.font_family).ok();
-        if let Some(font) = font {
-            let (_, width, _) = font.render_text(text, self.font_size);
+        let common_font = Font::load("common").ok();
+
+        let primary_font = font.as_ref().or(common_font.as_ref());
+        if let Some(font) = primary_font {
+            let (_, width, _) = font.render_text_with_fallback(
+                text,
+                self.font_size,
+                common_font.as_ref(),
+            );
             width as f64
         } else {
             0.0

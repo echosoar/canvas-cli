@@ -32,6 +32,15 @@ impl Default for FontConfig {
     }
 }
 
+/// 字符宽度类型
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum CharWidthType {
+    /// 半角，宽度为 size 的一半
+    Half,
+    /// 全角，宽度为 size
+    Full,
+}
+
 /// 单个字符的位图数据
 #[derive(Debug, Clone)]
 pub struct CharBitmap {
@@ -41,6 +50,8 @@ pub struct CharBitmap {
     pub width: u32,
     /// 字符高度（像素）
     pub height: u32,
+    /// 字符宽度类型
+    pub width_type: CharWidthType,
 }
 
 /// 字体对象
@@ -74,6 +85,9 @@ impl Font {
             Path::new("lib").join(&filename),
             Path::new("./lib").join(&filename),
             Path::new("../lib").join(&filename),
+            Path::new("canvas/lib").join(&filename),
+            Path::new("./canvas/lib").join(&filename),
+            Path::new("../canvas/lib").join(&filename),
         ];
 
         let mut file_path = None;
@@ -116,14 +130,16 @@ impl Font {
                 continue;
             }
 
-            // 解析格式：字符:base64数据
-            let parts: Vec<&str> = line.splitn(2, ':').collect();
-            if parts.len() != 2 {
+            // 解析格式：字符:type:base64数据
+            // type: 0 = 半角（宽度为 size/2），1 = 全角（宽度为 size）
+            let parts: Vec<&str> = line.splitn(3, ':').collect();
+            if parts.len() != 3 {
                 continue;
             }
 
             let char_str = parts[0];
-            let base64_data = parts[1];
+            let type_str = parts[1];
+            let base64_data = parts[2];
 
             if char_str.is_empty() {
                 continue;
@@ -131,8 +147,15 @@ impl Font {
 
             let ch = char_str.chars().next().unwrap();
 
+            // 解析类型
+            let width_type = match type_str {
+                "0" => CharWidthType::Half,
+                "1" => CharWidthType::Full,
+                _ => CharWidthType::Full, // 默认全角
+            };
+
             // 解码 base64 数据
-            match Self::decode_char_bitmap(base64_data, &config) {
+            match Self::decode_char_bitmap(base64_data, &config, width_type) {
                 Ok(bitmap) => {
                     chars.insert(ch, bitmap);
                 }
@@ -187,7 +210,7 @@ impl Font {
     }
 
     /// 解码单个字符的位图数据
-    fn decode_char_bitmap(base64_data: &str, config: &FontConfig) -> Result<CharBitmap, String> {
+    fn decode_char_bitmap(base64_data: &str, config: &FontConfig, width_type: CharWidthType) -> Result<CharBitmap, String> {
         // 解码 base64
         let binary_data = base64_decode(base64_data)
             .map_err(|e| format!("Base64 decode error: {}", e))?;
@@ -195,14 +218,21 @@ impl Font {
         let size = config.size as usize;
         let bits = config.bits as usize;
 
+        // 根据字符类型确定宽度
+        let char_width = match width_type {
+            CharWidthType::Half => size / 2,
+            CharWidthType::Full => size,
+        };
+
         // 创建位图矩阵
-        let mut bitmap = vec![vec![false; size]; size];
+        let mut bitmap = vec![vec![false; char_width]; size];
 
         // 根据 bit 数解析二进制数据
         match bits {
             1 => {
                 // 每个像素 1 bit
-                let total_bits = size * size;
+                // 位图数据按实际宽度存储
+                let total_bits = char_width * size;
                 let total_bytes = (total_bits + 7) / 8;
 
                 if binary_data.len() < total_bytes {
@@ -214,8 +244,8 @@ impl Font {
                 }
 
                 for y in 0..size {
-                    for x in 0..size {
-                        let bit_index = y * size + x;
+                    for x in 0..char_width {
+                        let bit_index = y * char_width + x;
                         let byte_index = bit_index / 8;
                         let bit_offset = 7 - (bit_index % 8);
 
@@ -233,14 +263,86 @@ impl Font {
 
         Ok(CharBitmap {
             bitmap,
-            width: config.size,
+            width: char_width as u32,
             height: config.size,
+            width_type,
         })
     }
 
     /// 获取字符的位图数据
     pub fn get_char(&self, ch: char) -> Option<&CharBitmap> {
         self.chars.get(&ch)
+    }
+
+    /// 渲染文本，支持 fallback 字体
+    ///
+    /// # 参数
+    /// - `text`: 要渲染的文本
+    /// - `font_size`: 目标字体大小（像素）
+    /// - `fallback`: fallback 字体，当当前字体找不到字符时使用
+    ///
+    /// # 返回
+    /// 返回 (位图矩阵, 总宽度, 行高)
+    pub fn render_text_with_fallback(&self, text: &str, font_size: u32, fallback: Option<&Font>) -> (Vec<Vec<bool>>, u32, u32) {
+        if text.is_empty() {
+            return (vec![], 0, 0);
+        }
+
+        // 计算缩放比例
+        let scale = font_size as f64 / self.config.size as f64;
+        let scaled_height = (self.config.size as f64 * scale).ceil() as u32;
+
+        // 计算总宽度，包括空格字符的默认半角宽度
+        let mut total_width = 0u32;
+        let char_bitmaps: Vec<Option<&CharBitmap>> = text
+            .chars()
+            .map(|ch| {
+                let bitmap = self.get_char(ch)
+                    .or_else(|| fallback.and_then(|f| f.get_char(ch)));
+
+                if let Some(bm) = bitmap {
+                    total_width += bm.width;
+                } else if ch == ' ' {
+                    // 空格字符不在字体中时，默认按半角宽度计算
+                    total_width += self.config.size / 2;
+                }
+
+                bitmap
+            })
+            .collect();
+
+        if total_width == 0 {
+            return (vec![], 0, scaled_height);
+        }
+
+        // 应用缩放后的总宽度
+        let scaled_total_width = (total_width as f64 * scale).ceil() as u32;
+
+        // 创建结果位图
+        let mut result = vec![vec![false; scaled_total_width as usize]; scaled_height as usize];
+
+        let mut x_offset = 0usize;
+
+        for char_bm in char_bitmaps {
+            if let Some(bm) = char_bm {
+                // 缩放并绘制字符
+                self.draw_scaled_char(
+                    &mut result,
+                    bm,
+                    x_offset,
+                    scale,
+                    scaled_height,
+                );
+
+                x_offset += (bm.width as f64 * scale).ceil() as usize;
+            } else {
+                // 空格字符不在字体中时，按半角宽度推进位置
+                let half_width = self.config.size / 2;
+                x_offset += (half_width as f64 * scale).ceil() as usize;
+            }
+        }
+
+        (result, scaled_total_width, scaled_height)
     }
 
     /// 渲染文本，返回位图数据和总宽度
@@ -260,14 +362,25 @@ impl Font {
         let scale = font_size as f64 / self.config.size as f64;
         let scaled_height = (self.config.size as f64 * scale).ceil() as u32;
 
+        // 计算总宽度，包括空格字符的默认半角宽度
         let mut total_width = 0u32;
-        let char_bitmaps: Vec<&CharBitmap> = text
+        let char_bitmaps: Vec<Option<&CharBitmap>> = text
             .chars()
-            .filter_map(|ch| self.get_char(ch))
-            .inspect(|bm| total_width += (*bm).width)
+            .map(|ch| {
+                let bitmap = self.get_char(ch);
+
+                if let Some(bm) = bitmap {
+                    total_width += bm.width;
+                } else if ch == ' ' {
+                    // 空格字符不在字体中时，默认按半角宽度计算
+                    total_width += self.config.size / 2;
+                }
+
+                bitmap
+            })
             .collect();
 
-        if char_bitmaps.is_empty() {
+        if total_width == 0 {
             return (vec![], 0, scaled_height);
         }
 
@@ -280,16 +393,22 @@ impl Font {
         let mut x_offset = 0usize;
 
         for char_bm in char_bitmaps {
-            // 缩放并绘制字符
-            self.draw_scaled_char(
-                &mut result,
-                char_bm,
-                x_offset,
-                scale,
-                scaled_height,
-            );
+            if let Some(bm) = char_bm {
+                // 缩放并绘制字符
+                self.draw_scaled_char(
+                    &mut result,
+                    bm,
+                    x_offset,
+                    scale,
+                    scaled_height,
+                );
 
-            x_offset += (char_bm.width as f64 * scale).ceil() as usize;
+                x_offset += (bm.width as f64 * scale).ceil() as usize;
+            } else {
+                // 空格字符不在字体中时，按半角宽度推进位置
+                let half_width = self.config.size / 2;
+                x_offset += (half_width as f64 * scale).ceil() as usize;
+            }
         }
 
         (result, scaled_total_width, scaled_height)
