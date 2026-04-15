@@ -3,6 +3,8 @@ name: canvas-cli
 description: 一个命令行图片生成工具。可以通过读取一段简单的文本指令脚本，即可完成 2D 图形绘制 ，并可以将生成的图片输出为 PNG 图像文件或 Base64 Data URL。
 ---
 
+> 提示：`canvas-cli` 命令的可执行文件放在本技能目录中，下述说明中的 `./canvas-cli` 指的就是这个可执行文件。
+
 ## 命令行用法
 
 ```
@@ -58,7 +60,7 @@ set_font <size>px <family>
 示例：`set_font 32px common`
 
 - `size`：字号（像素），决定文字高度。
-- `family`：字体名，对应 `lib/<family>.txt` 位图字体文件。
+- `family`：字体名，对应 `lib/<family>.txt` 位图字体文件，没有特别指定的情况下使用 common 这个内置字体。
 - 内置字体：`common`（支持 ASCII 及常用中文字符）。
 
 ---
