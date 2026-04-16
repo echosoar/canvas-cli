@@ -27,6 +27,7 @@ fn print_usage() {
     println!("  set_fill_style <color>            - Set fill style (e.g., red, #ff0000, rgb(255,0,0))");
     println!("  set_stroke_style <color>          - Set stroke style");
     println!("  set_font <size>px <family>        - Set font (e.g., 32px common)");
+    println!("  set_text_antialias_grid <n>        - Set text AA grid size (1-8, e.g., 8)");
     println!("  set_text_align <align>            - Set text alignment (start, end, left, right, center)");
     println!("  set_line_width <width>            - Set line width");
     println!("  fill_rect <x> <y> <w> <h>         - Fill a rectangle");
@@ -184,6 +185,12 @@ fn execute_commands(ctx: &mut canvas::Context2D, commands: &[String], base_path:
                     // Reconstruct font string like "32px common"
                     let font_str = parts[1..].join(" ");
                     ctx.set_font(&font_str);
+                }
+            }
+            "set_text_antialias_grid" => {
+                if parts.len() >= 2 {
+                    let grid = parse_u32(parts[1]);
+                    ctx.set_text_antialias_grid(grid);
                 }
             }
             "set_text_align" => {

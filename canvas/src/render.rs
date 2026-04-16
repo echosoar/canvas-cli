@@ -577,6 +577,52 @@ pub fn put_pixel_style(
     buf[base + 3] = result.a;
 }
 
+/// Set a pixel using a Style and a coverage factor in [0, 1].
+///
+/// This is primarily used by text antialiasing where the destination pixel is
+/// only partially covered by the source glyph.
+#[inline]
+pub fn put_pixel_style_coverage(
+    buf: &mut Vec<u8>,
+    width: u32,
+    height: u32,
+    x: i64,
+    y: i64,
+    style: &Style,
+    coverage: f64,
+    clip: &Option<Vec<bool>>,
+) {
+    if coverage <= 0.0 {
+        return;
+    }
+    if x < 0 || y < 0 || x >= width as i64 || y >= height as i64 {
+        return;
+    }
+    let idx = (y as u32 * width + x as u32) as usize;
+    if let Some(mask) = clip {
+        if !mask[idx] {
+            return;
+        }
+    }
+
+    let cov = coverage.clamp(0.0, 1.0);
+    let mut color = style.color_at(x as f64, y as f64);
+    if cov < 1.0 {
+        color.a = ((color.a as f64) * cov).round().clamp(0.0, 255.0) as u8;
+        if color.a == 0 {
+            return;
+        }
+    }
+
+    let base = idx * 4;
+    let dst = Color::rgba(buf[base], buf[base + 1], buf[base + 2], buf[base + 3]);
+    let result = color.blend_onto(dst);
+    buf[base] = result.r;
+    buf[base + 1] = result.g;
+    buf[base + 2] = result.b;
+    buf[base + 3] = result.a;
+}
+
 /// Fill an axis-aligned rectangle with a Style.
 pub fn fill_rect_style(
     buf: &mut Vec<u8>,
