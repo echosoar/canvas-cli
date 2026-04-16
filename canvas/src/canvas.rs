@@ -62,6 +62,7 @@ impl Canvas {
             font_style: String::new(),
             font_string: "32px common".to_string(),
             text_align: TextAlign::Start,
+            text_aa_grid: 4,
             state_stack: Vec::new(),
         })
     }
@@ -106,6 +107,7 @@ struct ContextState {
     font_style: String,
     font_string: String,
     text_align: TextAlign,
+    text_aa_grid: usize,
 }
 
 // ── Context2D ────────────────────────────────────────────────────────────────
@@ -132,6 +134,7 @@ pub struct Context2D {
     font_style: String,  // bold, italic, etc.
     font_string: String, // original font string like "bold 48px serif"
     text_align: TextAlign,
+    text_aa_grid: usize,
 
     // ── State Stack (for save/restore) ────────────────────────
     state_stack: Vec<ContextState>,
@@ -451,6 +454,56 @@ impl Context2D {
 // ─── Text methods ─────────────────────────────────────────────────────────────
 
 impl Context2D {
+    #[inline]
+    fn bitmap_value_at(bitmap: &[Vec<bool>], x: isize, y: isize) -> f64 {
+        if x < 0 || y < 0 {
+            return 0.0;
+        }
+        let yu = y as usize;
+        let xu = x as usize;
+        if yu >= bitmap.len() || xu >= bitmap[yu].len() {
+            return 0.0;
+        }
+        if bitmap[yu][xu] { 1.0 } else { 0.0 }
+    }
+
+    #[inline]
+    fn sample_bitmap_bilinear(bitmap: &[Vec<bool>], x: f64, y: f64) -> f64 {
+        let x0 = x.floor() as isize;
+        let y0 = y.floor() as isize;
+        let x1 = x0 + 1;
+        let y1 = y0 + 1;
+
+        let tx = x - x0 as f64;
+        let ty = y - y0 as f64;
+
+        let v00 = Self::bitmap_value_at(bitmap, x0, y0);
+        let v10 = Self::bitmap_value_at(bitmap, x1, y0);
+        let v01 = Self::bitmap_value_at(bitmap, x0, y1);
+        let v11 = Self::bitmap_value_at(bitmap, x1, y1);
+
+        let v0 = v00 * (1.0 - tx) + v10 * tx;
+        let v1 = v01 * (1.0 - tx) + v11 * tx;
+        (v0 * (1.0 - ty) + v1 * ty).clamp(0.0, 1.0)
+    }
+
+    #[inline]
+    fn sample_bitmap_nearest(bitmap: &[Vec<bool>], x: f64, y: f64) -> f64 {
+        let xi = x.round() as isize;
+        let yi = y.round() as isize;
+        Self::bitmap_value_at(bitmap, xi, yi)
+    }
+
+    /// Set text antialias sample grid size. Values are clamped to [1, 8].
+    pub fn set_text_antialias_grid(&mut self, grid: u32) {
+        self.text_aa_grid = grid.clamp(1, 8) as usize;
+    }
+
+    /// Return current text antialias sample grid size.
+    pub fn text_antialias_grid(&self) -> usize {
+        self.text_aa_grid
+    }
+
     /// Fill text at position `(x, y)` using the current `fillStyle` and font settings.
     ///
     /// The text is rendered using the loaded font bitmap, scaled to the current
@@ -515,23 +568,37 @@ impl Context2D {
                 let mut buf = self.buffer.borrow_mut();
                 for dst_y in 0..scaled_height as usize {
                     for dst_x in 0..scaled_width {
-                        let src_x = (dst_x as f64 / scale).round() as usize;
-                        let src_y = (dst_y as f64 / scale).round() as usize;
-
-                        if src_x < char_bm.width as usize && src_y < char_bm.height as usize {
-                            if char_bm.bitmap[src_y][src_x] {
-                                let px = current_x as i64 + dst_x as i64;
-                                let py = y as i64 + dst_y as i64;
-                                render::put_pixel_style(
-                                    &mut buf,
-                                    self.width,
-                                    self.height,
-                                    px,
-                                    py,
-                                    &style,
-                                    &self.clip,
-                                );
+                        let grid = self.text_aa_grid;
+                        let coverage = if grid <= 1 {
+                            let sample_x = dst_x as f64 / scale;
+                            let sample_y = dst_y as f64 / scale;
+                            Self::sample_bitmap_nearest(&char_bm.bitmap, sample_x, sample_y)
+                        } else {
+                            let mut accum = 0.0;
+                            let total_samples = grid * grid;
+                            for sy in 0..grid {
+                                for sx in 0..grid {
+                                    let sample_x = ((dst_x as f64 + (sx as f64 + 0.5) / grid as f64) + 0.5) / scale - 0.5;
+                                    let sample_y = ((dst_y as f64 + (sy as f64 + 0.5) / grid as f64) + 0.5) / scale - 0.5;
+                                    accum += Self::sample_bitmap_bilinear(&char_bm.bitmap, sample_x, sample_y);
+                                }
                             }
+                            (accum / total_samples as f64).clamp(0.0, 1.0)
+                        };
+
+                        if coverage > 0.0 {
+                            let px = current_x as i64 + dst_x as i64;
+                            let py = y as i64 + dst_y as i64;
+                            render::put_pixel_style_coverage(
+                                &mut buf,
+                                self.width,
+                                self.height,
+                                px,
+                                py,
+                                &style,
+                                coverage,
+                                &self.clip,
+                            );
                         }
                     }
                 }
@@ -593,20 +660,35 @@ impl Context2D {
         let mut buf = self.buffer.borrow_mut();
         for dst_y in 0..scaled_height {
             for dst_x in 0..scaled_width {
-                // Nearest neighbor sampling
-                let src_x = (dst_x as f64 / scale).round() as usize;
-                let src_y = (dst_y as f64 / scale).round() as usize;
+                let grid = self.text_aa_grid;
+                let coverage = if grid <= 1 {
+                    let sample_x = dst_x as f64 / scale;
+                    let sample_y = dst_y as f64 / scale;
+                    Self::sample_bitmap_nearest(&bitmap, sample_x, sample_y)
+                } else {
+                    let mut accum = 0.0;
+                    let total_samples = grid * grid;
+                    for sy in 0..grid {
+                        for sx in 0..grid {
+                            let sample_x = ((dst_x as f64 + (sx as f64 + 0.5) / grid as f64) + 0.5) / scale - 0.5;
+                            let sample_y = ((dst_y as f64 + (sy as f64 + 0.5) / grid as f64) + 0.5) / scale - 0.5;
+                            accum += Self::sample_bitmap_bilinear(&bitmap, sample_x, sample_y);
+                        }
+                    }
+                    (accum / total_samples as f64).clamp(0.0, 1.0)
+                };
 
-                if src_y < bitmap.len() && src_x < bitmap[src_y].len() && bitmap[src_y][src_x] {
+                if coverage > 0.0 {
                     let px = x_offset as i64 + dst_x as i64;
                     let py = y as i64 + dst_y as i64;
-                    render::put_pixel_style(
+                    render::put_pixel_style_coverage(
                         &mut buf,
                         self.width,
                         self.height,
                         px,
                         py,
                         &style,
+                        coverage,
                         &self.clip,
                     );
                 }
@@ -662,6 +744,7 @@ impl Context2D {
             font_style: self.font_style.clone(),
             font_string: self.font_string.clone(),
             text_align: self.text_align,
+            text_aa_grid: self.text_aa_grid,
         };
         self.state_stack.push(state);
     }
@@ -686,6 +769,7 @@ impl Context2D {
             self.font_style = state.font_style;
             self.font_string = state.font_string;
             self.text_align = state.text_align;
+            self.text_aa_grid = state.text_aa_grid;
         }
     }
 }

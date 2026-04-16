@@ -3,6 +3,9 @@ pure rust implemented drawer library( api like canvas), and no dependencies, sup
 
 ![](./test/cover.png)
 
+## Anti-aliasing
+![](./test/anti-aliasing.png)
+
 ## Use Cli
 ```sh
 # Draw from input.txt and save to output.png
@@ -37,18 +40,38 @@ add_color_stop linear_bg 0.2 #7c4105
 add_color_stop linear_bg 0.5 #e8d8c8
 add_color_stop linear_bg 1 #2b05b6
 set_fill_gradient linear_bg
-fill_rect 600 0 540 200
+fill_rect 550 0 240 200
 
+# 画一张图片，设置位置
 draw_image ../images/tests/image_220x200.png 860 0
+
+# 画一张图片，设置位置，并调整宽高
+draw_image ../images/tests/image_220x200.png 800 0 50 95
+
+# 画一张图片，选取部分图片，设置位置，并调整宽高
+draw_image ../images/tests/image_220x200.png 50 50 100 100 800 105 50 95
+
+# 设置文字颜色和字体
 set_fill_style black
 set_font 32px common
-fill_text "让天下没有难生成的图。" 20 50
-set_fill_style red
+
+# 设置抗锯齿，默认就是 4，设置为 1 则没有抗锯齿
+set_text_antialias_grid 4
+
+# 居中对齐
+set_text_align center
+fill_text "让天下没有难生成的图。" 450 50
+set_fill_style #ff0000
+set_text_align start
+set_font 32px common
 fill_text "Make it so that no graph is difficult to generate." 20 90
 set_fill_style blue
 set_font 16px common
-fill_text "--- 2026.03.15" 20 130
+set_text_align right
+fill_text "--- 2026.03.15" 820 130
 ```
+
+
 
 ## Use in Rust Code
 
@@ -93,3 +116,6 @@ func main() {
 ```
 cargo run --bin canvas-cli -- --draw --input=./test/input.txt --output=output.png
 ```
+
+## License
+MIT License
