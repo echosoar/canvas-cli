@@ -62,7 +62,7 @@ set_text_align <align>
 
 示例：`set_font 32px common`
 
-- `size`：字号（像素），决定文字高度。
+- `size`：字号（像素），决定文字高度（等于 size）和宽度（全角字符等于 size，半角字符为 size / 2）。
 - `family`：字体名，对应 `lib/<family>.txt` 位图字体文件，没有特别指定的情况下使用 common 这个内置字体。
 - 内置字体：`common`（支持 ASCII 及常用中文字符）。
 
@@ -71,6 +71,7 @@ set_text_align <align>
 - `start` / `left`：左对齐（默认），`x` 是文本左边缘。
 - `end` / `right`：右对齐，`x` 是文本右边缘。
 - `center`：居中对齐，`x` 是文本中心点。
+- 绘制文字时的 `y` 坐标始终是文本上方顶部位置，因此生成文本的时候需要特别注意 `y` 坐标的设置，确保文本纵向位置正确。
 
 示例：`set_text_align center`
 
