@@ -94,6 +94,17 @@ fn parse_quoted_string(s: &str) -> (String, usize) {
     }
 }
 
+fn split_next_token(s: &str) -> Option<(&str, &str)> {
+    let trimmed = s.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let token_end = trimmed.find(char::is_whitespace).unwrap_or(trimmed.len());
+    let token = &trimmed[..token_end];
+    let rest = trimmed[token_end..].trim();
+    Some((token, rest))
+}
+
 /// Stores either a linear or radial gradient
 enum Gradient {
     Linear(LinearGradient),
@@ -143,13 +154,15 @@ fn execute_commands(ctx: &mut canvas::Context2D, commands: &[String], base_path:
                 }
             }
             "set_fill_style" => {
-                if parts.len() >= 2 {
-                    ctx.set_fill_style(parts[1]);
+                let style = cmd[op.len()..].trim();
+                if !style.is_empty() {
+                    ctx.set_fill_style(style);
                 }
             }
             "set_stroke_style" => {
-                if parts.len() >= 2 {
-                    ctx.set_stroke_style(parts[1]);
+                let style = cmd[op.len()..].trim();
+                if !style.is_empty() {
+                    ctx.set_stroke_style(style);
                 }
             }
             "set_font" => {
@@ -268,17 +281,20 @@ fn execute_commands(ctx: &mut canvas::Context2D, commands: &[String], base_path:
                 }
             }
             "add_color_stop" => {
-                if parts.len() >= 4 {
-                    let id = parts[1];
-                    let offset = parse_float(parts[2]);
-                    let color = parts[3];
+                let rest = cmd[op.len()..].trim();
+                if let Some((id, rest)) = split_next_token(rest) {
+                    if let Some((offset, color)) = split_next_token(rest) {
+                        if color.is_empty() {
+                            continue;
+                        }
                     if let Some(gradient) = gradients.get_mut(id) {
                         match gradient {
-                            Gradient::Linear(g) => g.add_color_stop(offset, color),
-                            Gradient::Radial(g) => g.add_color_stop(offset, color),
+                            Gradient::Linear(g) => g.add_color_stop(parse_float(offset), color),
+                            Gradient::Radial(g) => g.add_color_stop(parse_float(offset), color),
                         }
                     } else {
                         eprintln!("Warning: Gradient '{}' not found", id);
+                    }
                     }
                 }
             }
@@ -419,4 +435,55 @@ fn base64_encode(data: &[u8]) -> String {
     }
 
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn split_next_token_preserves_remaining_text() {
+        let (token, rest) = split_next_token("gradient 0.5 rgba(255, 0, 0, 0.08)").unwrap();
+        assert_eq!(token, "gradient");
+        assert_eq!(rest, "0.5 rgba(255, 0, 0, 0.08)");
+    }
+
+    #[test]
+    fn execute_commands_accepts_fill_style_with_spaces() {
+        let canvas = Canvas::new(1, 1);
+        let mut ctx = canvas.get_context("2d").unwrap();
+        let commands = vec![
+            "set_fill_style rgba(255, 0, 0, 0.08)".to_string(),
+            "fill_rect 0 0 1 1".to_string(),
+        ];
+
+        execute_commands(&mut ctx, &commands, Path::new("."));
+
+        let pixel = canvas.get_image_data().get_pixel(0, 0);
+        assert_eq!(pixel.r, 255);
+        assert_eq!(pixel.g, 0);
+        assert_eq!(pixel.b, 0);
+        assert_eq!(pixel.a, 20);
+    }
+
+    #[test]
+    fn execute_commands_accepts_gradient_color_stop_with_spaces() {
+        let canvas = Canvas::new(1, 1);
+        let mut ctx = canvas.get_context("2d").unwrap();
+        let commands = vec![
+            "create_linear_gradient g 0 0 1 0".to_string(),
+            "add_color_stop g 0 rgba(255, 0, 0, 0.08)".to_string(),
+            "add_color_stop g 1 rgba(0, 0, 255, 0.16)".to_string(),
+            "set_fill_gradient g".to_string(),
+            "fill_rect 0 0 1 1".to_string(),
+        ];
+
+        execute_commands(&mut ctx, &commands, Path::new("."));
+
+        let pixel = canvas.get_image_data().get_pixel(0, 0);
+        assert_eq!(pixel.r, 255);
+        assert_eq!(pixel.g, 0);
+        assert_eq!(pixel.b, 0);
+        assert_eq!(pixel.a, 20);
+    }
 }
