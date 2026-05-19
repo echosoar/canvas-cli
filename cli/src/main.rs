@@ -8,11 +8,12 @@ fn print_usage() {
     println!();
     println!("Usage:");
     println!("  canvas-cli --input=<input.txt> --output=<output.png>");
+    println!("  canvas-cli --input=<input.svg> --output=<output.png>");
     println!("  canvas-cli --input=\"canvas 1080 200; [operation] [args...]\" --output=<output.png>");
     println!("  canvas-cli --input=<input.txt> --output-data-url");
     println!();
     println!("Options:");
-    println!("  --input=<path_or_commands>  - Input file path or inline commands");
+    println!("  --input=<path_or_commands>  - Input file path (.txt command file, .svg, or inline commands)");
     println!("  --output=<path>            - Output PNG file path");
     println!("  --output-data-url          - Output as data URL string instead of file");
     println!();
@@ -485,10 +486,39 @@ fn main() {
 
     // Check if input is a file path or inline commands
     let (commands, base_path): (Vec<String>, std::path::PathBuf) = if Path::new(&input).exists() {
-        // Read from file
-        let content = fs::read_to_string(&input).expect("Failed to read input file");
+        let input_path = Path::new(&input);
+
+        // If the input file is an SVG, render it directly and exit
+        if input_path
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|e| e.eq_ignore_ascii_case("svg"))
+            .unwrap_or(false)
+        {
+            let svg_bytes = fs::read(input_path).expect("Failed to read SVG file");
+            let img = canvas::render_svg(&svg_bytes, 0, 0)
+                .unwrap_or_else(|| {
+                    eprintln!("Error: Failed to parse/render SVG file");
+                    std::process::exit(1);
+                });
+            let canvas = Canvas::new(img.width, img.height);
+            let mut ctx = canvas.get_context("2d").expect("Failed to get 2d context");
+            ctx.draw_image(&img, 0.0, 0.0);
+            let png_bytes = images::to_blob(&canvas);
+            if output_data_url {
+                let base64 = base64_encode(&png_bytes);
+                println!("data:image/png;base64,{}", base64);
+            } else if let Some(output_path) = output {
+                fs::write(&output_path, &png_bytes).expect("Failed to write output file");
+                println!("Output saved to: {}", output_path);
+            }
+            return;
+        }
+
+        // Read from command file
+        let content = fs::read_to_string(input_path).expect("Failed to read input file");
         let cmds: Vec<String> = content.lines().map(|s| s.to_string()).collect();
-        let base_path = Path::new(&input).parent().unwrap_or(Path::new("."));
+        let base_path = input_path.parent().unwrap_or(Path::new("."));
         (cmds, base_path.to_path_buf())
     } else {
         // Parse inline commands (separated by semicolons)
