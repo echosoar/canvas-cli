@@ -1,0 +1,221 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="100%" height="100%">
+  <defs>
+    <linearGradient id="skyGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ff758f" />
+      <stop offset="40%" stop-color="#ff9770" />
+      <stop offset="100%" stop-color="#ffd670" />
+    </linearGradient>
+    
+    <linearGradient id="oceanGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#023e8a" />
+      <stop offset="100%" stop-color="#0096c7" />
+    </linearGradient>
+
+    <linearGradient id="sunGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffbe0b" />
+      <stop offset="100%" stop-color="#fb5607" />
+    </linearGradient>
+
+    <linearGradient id="sandGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#e9c46a" />
+      <stop offset="100%" stop-color="#f4a261" />
+    </linearGradient>
+
+    <linearGradient id="beakGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#ffb703" />
+      <stop offset="100%" stop-color="#ff9100" />
+    </linearGradient>
+    
+    <linearGradient id="pouchGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffb703" />
+      <stop offset="60%" stop-color="#f4a261" />
+      <stop offset="100%" stop-color="#e76f51" />
+    </linearGradient>
+
+    <g id="wheel">
+      <circle cx="0" cy="0" r="12" fill="#03045e" />
+      
+      <g stroke="#8d99ae" stroke-width="2">
+        <line x1="0" y1="-63" x2="0" y2="63" />
+        <line x1="-63" y1="0" x2="63" y2="0" />
+        <line x1="-44.5" y1="-44.5" x2="44.5" y2="44.5" />
+        <line x1="-44.5" y1="44.5" x2="44.5" y2="-44.5" />
+        <line x1="-24" y1="-58.2" x2="24" y2="58.2" />
+        <line x1="-24" y1="58.2" x2="24" y2="-58.2" />
+        <line x1="-58.2" y1="-24" x2="58.2" y2="24" />
+        <line x1="-58.2" y1="24" x2="58.2" y2="-24" />
+      </g>
+      
+      <circle cx="0" cy="0" r="80" fill="none" stroke="#03045e" stroke-width="16" />
+      <circle cx="0" cy="0" r="80" fill="none" stroke="#2b2d42" stroke-width="10" />
+      
+      <circle cx="0" cy="0" r="71" fill="none" stroke="#03045e" stroke-width="6" />
+      <circle cx="0" cy="0" r="71" fill="none" stroke="#fefae0" stroke-width="3" />
+      
+      <circle cx="0" cy="0" r="66" fill="none" stroke="#03045e" stroke-width="6" />
+      <circle cx="0" cy="0" r="66" fill="none" stroke="#ff006e" stroke-width="3" />
+
+      <circle cx="0" cy="0" r="5" fill="#fefae0" />
+    </g>
+  </defs>
+
+  <rect x="0" y="0" width="800" height="380" fill="url(#skyGrad)" />
+  
+  <circle cx="400" cy="380" r="160" fill="url(#sunGrad)" />
+
+  <g fill="#ffffff" opacity="0.7">
+    <path d="M 100 60 Q 100 80 80 80 Q 100 80 100 100 Q 100 80 120 80 Q 100 80 100 60 Z" />
+    <path d="M 700 80 Q 700 95 685 95 Q 700 95 700 110 Q 700 95 715 95 Q 700 95 700 80 Z" />
+    <path d="M 250 40 Q 250 50 240 50 Q 250 50 250 60 Q 250 50 260 50 Q 250 50 250 40 Z" />
+    <path d="M 550 50 Q 550 65 535 65 Q 550 65 550 80 Q 550 65 565 65 Q 550 65 550 50 Z" />
+  </g>
+
+  <g fill="#ffffff" opacity="0.6">
+    <path d="M 150 120 C 150 100, 180 100, 190 110 C 200 90, 240 90, 250 110 C 270 110, 270 130, 250 140 L 150 140 C 130 140, 130 120, 150 120 Z" />
+    <path d="M 650 180 C 650 165, 675 165, 685 175 C 695 160, 725 160, 735 175 C 750 175, 750 190, 735 200 L 650 200 C 635 200, 635 180, 650 180 Z" />
+    <path d="M 350 70 C 350 60, 370 60, 380 65 C 390 55, 410 55, 420 65 C 430 65, 430 75, 420 80 L 350 80 C 340 80, 340 70, 350 70 Z" opacity="0.4" />
+  </g>
+
+  <g fill="none" stroke="#03045e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" opacity="0.6">
+    <path d="M 600 120 Q 615 105 630 120 Q 645 105 660 120" />
+    <path d="M 550 150 Q 560 140 570 150 Q 580 140 590 150" stroke-width="2" />
+    <path d="M 650 160 Q 655 155 660 160 Q 665 155 670 160" stroke-width="2" />
+  </g>
+
+  <g fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round" opacity="0.5">
+    <path d="M -50 200 Q 100 200 150 180" />
+    <path d="M 600 150 Q 700 150 750 130" />
+    <path d="M 100 100 Q 200 120 250 100" stroke-width="2" />
+  </g>
+
+  <rect x="0" y="380" width="800" height="140" fill="url(#oceanGrad)" />
+  <polygon points="350,380 450,380 480,520 320,520" fill="url(#sunGrad)" opacity="0.4" />
+  <g fill="none" stroke="#90e0ef" stroke-width="2" stroke-linecap="round" opacity="0.6">
+    <path d="M 100 400 Q 120 395 140 400 T 180 400" />
+    <path d="M 600 420 Q 620 415 640 420 T 680 420" />
+    <path d="M 300 450 Q 320 445 340 450 T 380 450" />
+    <path d="M 50 480 Q 70 475 90 480 T 130 480" />
+    <path d="M 700 490 Q 720 485 740 490 T 780 490" />
+  </g>
+
+  <rect x="0" y="520" width="800" height="80" fill="url(#sandGrad)" />
+  <line x1="0" y1="520" x2="800" y2="520" stroke="#03045e" stroke-width="4" />
+  <line x1="0" y1="540" x2="800" y2="540" stroke="#d4a373" stroke-width="4" />
+  <line x1="0" y1="565" x2="800" y2="565" stroke="#d4a373" stroke-width="6" />
+
+  <g fill="#03045e" opacity="0.15">
+    <ellipse cx="200" cy="536" rx="45" ry="6" />
+    <ellipse cx="600" cy="536" rx="45" ry="6" />
+    <rect x="200" y="532" width="400" height="8" rx="4" />
+  </g>
+
+  <path d="M 420 180 C 460 170, 500 180, 520 210 C 490 220, 450 210, 420 200 Z" fill="#e2e8f0" stroke="#03045e" stroke-width="4" stroke-linejoin="round" />
+
+  <line x1="340" y1="450" x2="315" y2="407" stroke="#03045e" stroke-width="10" stroke-linecap="round" />
+  <line x1="340" y1="450" x2="315" y2="407" stroke="#8d99ae" stroke-width="6" stroke-linecap="round" />
+  <rect x="300" y="402" width="30" height="10" rx="4" fill="#03045e" transform="rotate(-15 315 407)" />
+
+  <path d="M 315 407 L 340 405 L 345 415 L 325 415 Z" fill="#e76f51" stroke="#03045e" stroke-width="3" stroke-linejoin="round" />
+  <path d="M 265 330 L 315 407 L 325 403 L 275 328 Z" fill="#f4a261" stroke="#03045e" stroke-width="3" stroke-linejoin="round" />
+  <path d="M 290 260 L 260 330 L 280 340 L 310 280 Z" fill="#e2e8f0" stroke="#03045e" stroke-width="3" stroke-linejoin="round" />
+
+
+  <use href="#wheel" x="200" y="450" />
+  <use href="#wheel" x="600" y="450" />
+
+  <g stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 340 450 L 300 280 M 200 450 L 340 450 M 300 280 L 500 270 M 340 450 L 515 330 M 200 450 L 300 280 M 500 270 L 515 330 Q 550 420 600 450" fill="none" stroke="#03045e" stroke-width="18" />
+    <path d="M 340 450 L 300 280 M 200 450 L 340 450 M 300 280 L 500 270 M 340 450 L 515 330 M 200 450 L 300 280 M 500 270 L 515 330 Q 550 420 600 450" fill="none" stroke="#00b4d8" stroke-width="10" />
+    <path d="M 300 280 L 500 270 M 340 450 L 515 330 M 515 330 Q 550 420 600 450" fill="none" stroke="#90e0ef" stroke-width="3" transform="translate(0, -3)" />
+  </g>
+
+  <circle cx="200" cy="450" r="15" fill="#e0e1dd" stroke="#03045e" stroke-width="4" />
+  <circle cx="340" cy="450" r="25" fill="#e0e1dd" stroke="#03045e" stroke-width="4" />
+  
+  <path d="M 200 435 L 340 425 A 25 25 0 0 1 340 475 L 200 465 A 15 15 0 0 1 200 435 Z" fill="none" stroke="#03045e" stroke-width="6" stroke-linejoin="round" />
+  <path d="M 200 435 L 340 425 A 25 25 0 0 1 340 475 L 200 465 A 15 15 0 0 1 200 435 Z" fill="none" stroke="#8d99ae" stroke-width="2" stroke-dasharray="4,4" />
+
+  <circle cx="200" cy="450" r="6" fill="#03045e" />
+  <circle cx="340" cy="450" r="10" fill="#03045e" />
+
+  <line x1="340" y1="450" x2="365" y2="493" stroke="#03045e" stroke-width="10" stroke-linecap="round" />
+  <line x1="340" y1="450" x2="365" y2="493" stroke="#e0e1dd" stroke-width="6" stroke-linecap="round" />
+  <rect x="350" y="488" width="30" height="10" rx="4" fill="#03045e" transform="rotate(-15 365 493)" />
+
+  <line x1="300" y1="280" x2="290" y2="240" stroke="#03045e" stroke-width="10" stroke-linecap="round" />
+  <line x1="300" y1="280" x2="290" y2="240" stroke="#e0e1dd" stroke-width="6" stroke-linecap="round" />
+  <path d="M 260 240 C 260 230, 300 230, 320 240 C 330 245, 320 250, 300 250 C 270 250, 260 245, 260 240 Z" fill="#03045e" />
+
+  <line x1="500" y1="270" x2="520" y2="250" stroke="#03045e" stroke-width="10" stroke-linecap="round" />
+  <line x1="500" y1="270" x2="520" y2="250" stroke="#e0e1dd" stroke-width="6" stroke-linecap="round" />
+  <path d="M 520 250 C 560 240, 580 270, 560 300 C 540 320, 520 310, 530 290" fill="none" stroke="#03045e" stroke-width="12" stroke-linecap="round" />
+  <path d="M 520 250 C 560 240, 580 270, 560 300 C 540 320, 520 310, 530 290" fill="none" stroke="#ff006e" stroke-width="6" stroke-linecap="round" />
+  
+  <path d="M 555 260 L 575 270 L 570 280 Z" fill="#e0e1dd" stroke="#03045e" stroke-width="3" stroke-linejoin="round" />
+
+  <path d="M 525 250 L 585 250 L 575 310 L 530 310 Z" fill="#f8f9fa" stroke="#03045e" stroke-width="4" stroke-linejoin="round" />
+  <line x1="535" y1="250" x2="540" y2="310" stroke="#03045e" stroke-width="2" />
+  <line x1="555" y1="250" x2="555" y2="310" stroke="#03045e" stroke-width="2" />
+  <line x1="575" y1="250" x2="565" y2="310" stroke="#03045e" stroke-width="2" />
+  <line x1="528" y1="270" x2="582" y2="270" stroke="#03045e" stroke-width="2" />
+  <line x1="530" y1="290" x2="578" y2="290" stroke="#03045e" stroke-width="2" />
+
+  <g id="fish">
+    <path d="M 565 210 L 575 195 L 580 212 Z" fill="#48cae4" stroke="#03045e" stroke-width="2" stroke-linejoin="round" />
+    <path d="M 540 250 Q 540 210 565 210 Q 590 210 580 240 Q 570 250 540 250 Z" fill="#48cae4" stroke="#03045e" stroke-width="3" />
+    <path d="M 580 240 L 595 230 L 590 250 Z" fill="#48cae4" stroke="#03045e" stroke-width="3" stroke-linejoin="round" />
+    <circle cx="550" cy="220" r="2.5" fill="#03045e" />
+    <circle cx="549.5" cy="219.5" r="1" fill="#ffffff" />
+    <circle cx="560" cy="195" r="2" fill="#ffffff" />
+    <circle cx="575" cy="205" r="1.5" fill="#ffffff" />
+    <circle cx="545" cy="200" r="1" fill="#ffffff" />
+  </g>
+
+
+  <path d="M 410 60 C 390 45, 360 60, 350 90 C 340 130, 310 160, 280 180 C 240 200, 200 210, 170 230 L 210 240 C 240 280, 300 300, 350 280 C 400 260, 430 210, 400 150 C 380 120, 380 90, 410 80 Z" fill="#f8f9fa" stroke="#03045e" stroke-width="6" stroke-linejoin="round" />
+  
+  <path d="M 210 240 C 240 280, 300 300, 350 280 C 400 260, 430 210, 400 150 C 380 200, 340 240, 280 240 Z" fill="#e2e8f0" />
+  
+  <path d="M 210 230 L 180 235 M 205 220 L 185 220" stroke="#03045e" stroke-width="3" stroke-linecap="round" />
+
+  <path d="M 345 110 Q 300 100 250 115 Q 290 125 345 120 Z" fill="#ff006e" stroke="#03045e" stroke-width="3" stroke-linejoin="round" />
+  <path d="M 345 115 Q 280 130 240 150 Q 290 145 345 125 Z" fill="#ff006e" stroke="#03045e" stroke-width="3" stroke-linejoin="round" />
+  <path d="M 340 115 Q 365 130 385 110 Q 375 95 350 105 Z" fill="#ff006e" stroke="#03045e" stroke-width="3" />
+
+  <path d="M 410 60 Q 500 65 590 85 Q 580 95 560 92 Q 480 80 410 80 Z" fill="url(#beakGrad)" stroke="#03045e" stroke-width="4" stroke-linejoin="round" />
+  
+  <path d="M 410 80 Q 480 80 560 92 C 540 180, 450 190, 400 150 C 390 130, 380 100, 410 80 Z" fill="url(#pouchGrad)" stroke="#03045e" stroke-width="4" stroke-linejoin="round" />
+  
+  <path d="M 420 72 Q 480 75 560 88" fill="none" stroke="#e85d04" stroke-width="3" stroke-linecap="round" />
+
+  <ellipse cx="385" cy="78" rx="6" ry="3" fill="#ff758f" opacity="0.8" />
+  <circle cx="395" cy="70" r="6" fill="#ffffff" stroke="#03045e" stroke-width="2" />
+  <circle cx="397" cy="70" r="2.5" fill="#03045e" />
+  <circle cx="398" cy="69" r="1" fill="#ffffff" />
+  <path d="M 390 62 Q 395 58 402 62" fill="none" stroke="#03045e" stroke-width="2" stroke-linecap="round" />
+
+  <path d="M 350 85 C 350 50, 390 45, 405 60 C 390 65, 370 75, 350 85 Z" fill="#ff006e" stroke="#03045e" stroke-width="3" />
+  <path d="M 350 85 C 330 85, 320 70, 325 65 C 335 70, 345 75, 355 80 Z" fill="#00b4d8" stroke="#03045e" stroke-width="3" stroke-linejoin="round" />
+  <circle cx="375" cy="50" r="4" fill="#ffb703" stroke="#03045e" stroke-width="2" />
+
+  <path d="M 320 270 L 290 350 L 315 365 L 350 280 Z" fill="#f8f9fa" stroke="#03045e" stroke-width="4" stroke-linejoin="round" />
+  <path d="M 300 355 L 365 493 L 380 487 L 315 350 Z" fill="#f4a261" stroke="#03045e" stroke-width="4" stroke-linejoin="round" />
+  <path d="M 365 493 L 400 488 L 415 500 L 380 505 Z" fill="#e76f51" stroke="#03045e" stroke-width="4" stroke-linejoin="round" />
+
+  <path d="M 340 180 C 400 150, 480 200, 520 250 C 490 270, 450 250, 410 220 C 370 200, 330 210, 320 220 Z" fill="#f8f9fa" stroke="#03045e" stroke-width="5" stroke-linejoin="round" />
+  <path d="M 480 220 C 500 235, 520 250, 520 250 C 490 270, 470 255, 450 240 Z" fill="#2b2d42" />
+  
+  <path d="M 410 185 Q 430 215, 420 225" stroke="#03045e" stroke-width="3" stroke-linecap="round" fill="none" />
+  <path d="M 445 200 Q 460 230, 445 240" stroke="#03045e" stroke-width="3" stroke-linecap="round" fill="none" />
+  <path d="M 475 215 Q 485 240, 470 255" stroke="#03045e" stroke-width="3" stroke-linecap="round" fill="none" />
+
+
+  <g stroke="#ffffff" stroke-width="4" stroke-linecap="round" opacity="0.7">
+    <line x1="80" y1="535" x2="160" y2="535" />
+    <line x1="300" y1="545" x2="400" y2="545" stroke-width="3" />
+    <line x1="650" y1="560" x2="720" y2="560" stroke-width="5" />
+    <line x1="450" y1="575" x2="520" y2="575" />
+    <line x1="220" y1="585" x2="350" y2="585" stroke-width="6" />
+  </g>
+
+</svg>

@@ -10,9 +10,11 @@
 //! - `viewBox` for coordinate mapping
 
 use std::f64::consts::PI;
+use std::collections::HashMap;
 
 use crate::canvas::{Canvas, Context2D};
 use crate::color::{parse_color, Color};
+use crate::gradient::LinearGradient;
 use crate::image::ImageData;
 
 // ── XML parser ───────────────────────────────────────────────────────────────
@@ -527,30 +529,53 @@ impl Transform {
 
 // ── SVG style ─────────────────────────────────────────────────────────────────
 
+#[derive(Clone, Debug)]
+enum SvgPaint {
+    Color(Color),
+    Ref(String),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum GradientUnits {
+    ObjectBoundingBox,
+    UserSpaceOnUse,
+}
+
+#[derive(Clone, Debug)]
+struct SvgLinearGradientDef {
+    x1: f64,
+    y1: f64,
+    x2: f64,
+    y2: f64,
+    units: GradientUnits,
+    stops: Vec<(f64, Color)>,
+}
+
 /// The resolved presentation style for an SVG element.
 #[derive(Clone, Debug)]
-pub struct SvgStyle {
+struct SvgStyle {
     /// Fill paint – `None` means "inherit", `Some(None)` means `none`/`transparent`.
-    pub fill: Option<Option<Color>>,
+    fill: Option<Option<SvgPaint>>,
     /// Stroke paint.
-    pub stroke: Option<Option<Color>>,
-    pub stroke_width: Option<f64>,
+    stroke: Option<Option<SvgPaint>>,
+    stroke_width: Option<f64>,
     /// Element-level opacity (0.0–1.0).
-    pub opacity: f64,
+    opacity: f64,
     /// Fill opacity override (0.0–1.0, applied on top of color alpha).
-    pub fill_opacity: Option<f64>,
+    fill_opacity: Option<f64>,
     /// Stroke opacity override.
-    pub stroke_opacity: Option<f64>,
-    pub fill_rule: Option<String>,
-    pub stroke_linecap: Option<String>,
-    pub stroke_linejoin: Option<String>,
+    stroke_opacity: Option<f64>,
+    fill_rule: Option<String>,
+    stroke_linecap: Option<String>,
+    stroke_linejoin: Option<String>,
+    stroke_dasharray: Option<Vec<f64>>,
 }
 
 impl SvgStyle {
     /// The default CSS/SVG initial values.
     fn initial() -> Self {
         SvgStyle {
-            fill: Some(Some(Color::black())),
+            fill: Some(Some(SvgPaint::Color(Color::black()))),
             stroke: Some(None),
             stroke_width: Some(1.0),
             opacity: 1.0,
@@ -559,16 +584,13 @@ impl SvgStyle {
             fill_rule: Some("nonzero".to_string()),
             stroke_linecap: Some("butt".to_string()),
             stroke_linejoin: Some("miter".to_string()),
+            stroke_dasharray: None,
         }
     }
 
     /// Inherit styles from `parent`, then apply values from `element`.
     fn inherit_and_apply(parent: &SvgStyle, element: &XmlElement) -> SvgStyle {
         let mut s = parent.clone();
-        // `opacity` is applied per-element and not propagated to children as an
-        // inherited value; reset it to 1.0 so each element starts with full
-        // opacity (its own `opacity` attribute is parsed below).
-        s.opacity = 1.0;
 
         // Parse inline style="" attribute first for lower precedence
         if let Some(style_str) = element.attr("style") {
@@ -581,26 +603,65 @@ impl SvgStyle {
         s
     }
 
-    /// Resolve the effective fill color (applying fill-opacity and opacity).
-    fn effective_fill(&self) -> Option<Color> {
-        let base = self.fill.as_ref()?.as_ref()?.clone();
-        let fill_opacity = self.fill_opacity.unwrap_or(1.0);
-        let opacity = self.opacity;
-        let alpha = (base.a as f64 / 255.0 * fill_opacity * opacity).clamp(0.0, 1.0);
-        Some(Color::rgba(base.r, base.g, base.b, (alpha * 255.0).round() as u8))
+    /// Resolve the effective fill paint and opacity.
+    fn effective_fill(&self) -> Option<SvgPaint> {
+        match self.fill.as_ref()?.as_ref()? {
+            SvgPaint::Color(base) => {
+                let fill_opacity = self.fill_opacity.unwrap_or(1.0);
+                let opacity = self.opacity;
+                let alpha = (base.a as f64 / 255.0 * fill_opacity * opacity).clamp(0.0, 1.0);
+                Some(SvgPaint::Color(Color::rgba(
+                    base.r,
+                    base.g,
+                    base.b,
+                    (alpha * 255.0).round() as u8,
+                )))
+            }
+            SvgPaint::Ref(id) => Some(SvgPaint::Ref(id.clone())),
+        }
     }
 
-    /// Resolve the effective stroke color (applying stroke-opacity and opacity).
-    fn effective_stroke(&self) -> Option<Color> {
-        let base = self.stroke.as_ref()?.as_ref()?.clone();
-        let stroke_opacity = self.stroke_opacity.unwrap_or(1.0);
-        let opacity = self.opacity;
-        let alpha = (base.a as f64 / 255.0 * stroke_opacity * opacity).clamp(0.0, 1.0);
-        Some(Color::rgba(base.r, base.g, base.b, (alpha * 255.0).round() as u8))
+    /// Resolve the effective stroke paint and opacity.
+    fn effective_stroke(&self) -> Option<SvgPaint> {
+        match self.stroke.as_ref()?.as_ref()? {
+            SvgPaint::Color(base) => {
+                let stroke_opacity = self.stroke_opacity.unwrap_or(1.0);
+                let opacity = self.opacity;
+                let alpha = (base.a as f64 / 255.0 * stroke_opacity * opacity).clamp(0.0, 1.0);
+                Some(SvgPaint::Color(Color::rgba(
+                    base.r,
+                    base.g,
+                    base.b,
+                    (alpha * 255.0).round() as u8,
+                )))
+            }
+            SvgPaint::Ref(id) => Some(SvgPaint::Ref(id.clone())),
+        }
+    }
+
+    fn fill_opacity_factor(&self) -> f64 {
+        (self.fill_opacity.unwrap_or(1.0) * self.opacity).clamp(0.0, 1.0)
+    }
+
+    fn stroke_opacity_factor(&self) -> f64 {
+        (self.stroke_opacity.unwrap_or(1.0) * self.opacity).clamp(0.0, 1.0)
     }
 
     fn effective_stroke_width(&self) -> f64 {
         self.stroke_width.unwrap_or(1.0)
+    }
+
+    fn effective_stroke_dasharray(&self) -> Option<Vec<f64>> {
+        let arr = self.stroke_dasharray.as_ref()?;
+        let mut normalized: Vec<f64> = arr.iter().copied().filter(|v| *v > 0.0).collect();
+        if normalized.is_empty() {
+            return None;
+        }
+        if normalized.len() % 2 == 1 {
+            let copy = normalized.clone();
+            normalized.extend(copy);
+        }
+        Some(normalized)
     }
 }
 
@@ -631,6 +692,7 @@ fn apply_presentation_attrs(s: &mut SvgStyle, el: &XmlElement) {
         "fill-rule",
         "stroke-linecap",
         "stroke-linejoin",
+        "stroke-dasharray",
     ];
     for prop in &props {
         if let Some(val) = el.attr(prop) {
@@ -661,12 +723,13 @@ fn apply_single_style_prop(s: &mut SvgStyle, prop: &str, val: &str) {
         }
         "opacity" => {
             if let Ok(v) = val.trim_end_matches('%').parse::<f64>() {
-                s.opacity = if val.ends_with('%') {
+                let local_opacity = if val.ends_with('%') {
                     v / 100.0
                 } else {
                     v
                 }
                 .clamp(0.0, 1.0);
+                s.opacity = (s.opacity * local_opacity).clamp(0.0, 1.0);
             }
         }
         "fill-opacity" => {
@@ -692,20 +755,36 @@ fn apply_single_style_prop(s: &mut SvgStyle, prop: &str, val: &str) {
         "stroke-linejoin" => {
             s.stroke_linejoin = Some(val.to_string());
         }
+        "stroke-dasharray" => {
+            if val.eq_ignore_ascii_case("none") {
+                s.stroke_dasharray = Some(Vec::new());
+            } else {
+                let nums = parse_number_list(val)
+                    .into_iter()
+                    .filter(|v| *v > 0.0)
+                    .collect::<Vec<_>>();
+                s.stroke_dasharray = Some(nums);
+            }
+        }
         _ => {}
     }
 }
 
-fn parse_svg_paint(val: &str) -> Option<Color> {
+fn parse_svg_paint(val: &str) -> Option<SvgPaint> {
     let val = val.trim();
     if val == "none" || val == "transparent" {
         None
     } else if val.starts_with("url(") {
-        // Gradient references not yet supported in this path
-        None
+        parse_paint_ref(val).map(SvgPaint::Ref)
     } else {
-        parse_color(val)
+        parse_color(val).map(SvgPaint::Color)
     }
+}
+
+fn parse_paint_ref(val: &str) -> Option<String> {
+    let inner = val.strip_prefix("url(")?.strip_suffix(')')?.trim();
+    let inner = inner.trim_matches('"').trim_matches('\'');
+    inner.strip_prefix('#').map(|id| id.trim().to_string()).filter(|id| !id.is_empty())
 }
 
 fn parse_svg_length(val: &str) -> Option<f64> {
@@ -717,6 +796,161 @@ fn parse_svg_length(val: &str) -> Option<f64> {
         }
     }
     val.parse().ok()
+}
+
+fn parse_gradient_coord(val: Option<&str>, default: f64, units: GradientUnits) -> f64 {
+    let raw = match val {
+        Some(v) => v.trim(),
+        None => return default,
+    };
+    if raw.is_empty() {
+        return default;
+    }
+    if let Some(num) = raw.strip_suffix('%') {
+        return num.trim().parse::<f64>().ok().map(|v| v / 100.0).unwrap_or(default);
+    }
+    if units == GradientUnits::ObjectBoundingBox {
+        raw.parse::<f64>().ok().unwrap_or(default)
+    } else {
+        parse_svg_length(raw).unwrap_or(default)
+    }
+}
+
+fn parse_stop_opacity(stop: &XmlElement) -> f64 {
+    if let Some(v) = stop.attr("stop-opacity") {
+        if let Ok(opacity) = v.trim().trim_end_matches('%').parse::<f64>() {
+            return if v.trim().ends_with('%') {
+                (opacity / 100.0).clamp(0.0, 1.0)
+            } else {
+                opacity.clamp(0.0, 1.0)
+            };
+        }
+    }
+    if let Some(style_str) = stop.attr("style") {
+        for decl in style_str.split(';') {
+            let decl = decl.trim();
+            if let Some((prop, value)) = decl.split_once(':') {
+                if prop.trim().eq_ignore_ascii_case("stop-opacity") {
+                    let v = value.trim();
+                    if let Ok(opacity) = v.trim_end_matches('%').parse::<f64>() {
+                        return if v.ends_with('%') {
+                            (opacity / 100.0).clamp(0.0, 1.0)
+                        } else {
+                            opacity.clamp(0.0, 1.0)
+                        };
+                    }
+                }
+            }
+        }
+    }
+    1.0
+}
+
+fn parse_stop_color(stop: &XmlElement) -> Option<Color> {
+    if let Some(c) = stop.attr("stop-color").and_then(parse_color) {
+        return Some(c);
+    }
+    if let Some(style_str) = stop.attr("style") {
+        for decl in style_str.split(';') {
+            let decl = decl.trim();
+            if let Some((prop, value)) = decl.split_once(':') {
+                if prop.trim().eq_ignore_ascii_case("stop-color") {
+                    if let Some(c) = parse_color(value.trim()) {
+                        return Some(c);
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+fn parse_stop_offset(stop: &XmlElement) -> f64 {
+    let raw = stop.attr("offset").unwrap_or("0").trim();
+    let parsed = if let Some(num) = raw.strip_suffix('%') {
+        num.trim().parse::<f64>().ok().map(|v| v / 100.0)
+    } else {
+        raw.parse::<f64>().ok()
+    };
+    parsed.unwrap_or(0.0).clamp(0.0, 1.0)
+}
+
+fn collect_linear_gradients(root: &XmlElement) -> HashMap<String, SvgLinearGradientDef> {
+    let mut defs = HashMap::new();
+    collect_linear_gradients_inner(root, &mut defs);
+    defs
+}
+
+fn collect_id_elements(root: &XmlElement) -> HashMap<String, XmlElement> {
+    let mut defs = HashMap::new();
+    collect_id_elements_inner(root, &mut defs);
+    defs
+}
+
+fn collect_id_elements_inner(el: &XmlElement, defs: &mut HashMap<String, XmlElement>) {
+    if let Some(id) = el.attr("id").map(str::trim).filter(|v| !v.is_empty()) {
+        defs.insert(id.to_string(), el.clone());
+    }
+    for child in el.child_elements() {
+        collect_id_elements_inner(child, defs);
+    }
+}
+
+fn parse_href_ref(val: &str) -> Option<String> {
+    let href = val.trim().trim_matches('"').trim_matches('\'');
+    href.strip_prefix('#')
+        .map(|id| id.trim().to_string())
+        .filter(|id| !id.is_empty())
+}
+
+fn parse_use_href(el: &XmlElement) -> Option<String> {
+    el.attr("href")
+        .and_then(parse_href_ref)
+        .or_else(|| el.attr("xlink:href").and_then(parse_href_ref))
+}
+
+fn collect_linear_gradients_inner(el: &XmlElement, defs: &mut HashMap<String, SvgLinearGradientDef>) {
+    if el.name.eq_ignore_ascii_case("linearGradient") {
+        if let Some(id) = el.attr("id").map(str::trim).filter(|v| !v.is_empty()) {
+            let units = if el
+                .attr("gradientUnits")
+                .map(|v| v.trim().eq_ignore_ascii_case("userSpaceOnUse"))
+                .unwrap_or(false)
+            {
+                GradientUnits::UserSpaceOnUse
+            } else {
+                GradientUnits::ObjectBoundingBox
+            };
+            let mut stops: Vec<(f64, Color)> = Vec::new();
+            for child in el.child_elements() {
+                if child.name.eq_ignore_ascii_case("stop") {
+                    let offset = parse_stop_offset(child);
+                    let mut color = parse_stop_color(child).unwrap_or_else(Color::black);
+                    let stop_alpha = parse_stop_opacity(child);
+                    let alpha = ((color.a as f64 / 255.0) * stop_alpha).clamp(0.0, 1.0);
+                    color.a = (alpha * 255.0).round() as u8;
+                    stops.push((offset, color));
+                }
+            }
+            stops.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+
+            defs.insert(
+                id.to_string(),
+                SvgLinearGradientDef {
+                    x1: parse_gradient_coord(el.attr("x1"), 0.0, units),
+                    y1: parse_gradient_coord(el.attr("y1"), 0.0, units),
+                    x2: parse_gradient_coord(el.attr("x2"), 1.0, units),
+                    y2: parse_gradient_coord(el.attr("y2"), 0.0, units),
+                    units,
+                    stops,
+                },
+            );
+        }
+    }
+
+    for child in el.child_elements() {
+        collect_linear_gradients_inner(child, defs);
+    }
 }
 
 // ── Number list / path data helpers ──────────────────────────────────────────
@@ -1308,6 +1542,8 @@ pub fn render_svg_str(
 
     let canvas = Canvas::new(out_w, out_h);
     let mut ctx = canvas.get_context("2d")?;
+    let gradients = collect_linear_gradients(svg_el);
+    let id_elements = collect_id_elements(svg_el);
 
     // Compute the viewBox → canvas transform
     let base_transform = if let Some(vb) = svg_el.attr("viewBox").and_then(parse_viewbox) {
@@ -1332,7 +1568,15 @@ pub fn render_svg_str(
     };
 
     let initial_style = SvgStyle::initial();
-    render_element(svg_el, &mut ctx, &initial_style, &base_transform);
+    render_element(
+        svg_el,
+        &mut ctx,
+        &initial_style,
+        &base_transform,
+        &gradients,
+        &id_elements,
+        0,
+    );
 
     Some(canvas.get_image_data())
 }
@@ -1343,6 +1587,9 @@ fn render_element(
     ctx: &mut Context2D,
     parent_style: &SvgStyle,
     transform: &Transform,
+    gradients: &HashMap<String, SvgLinearGradientDef>,
+    id_elements: &HashMap<String, XmlElement>,
+    use_depth: usize,
 ) {
     let style = SvgStyle::inherit_and_apply(parent_style, el);
 
@@ -1356,26 +1603,59 @@ fn render_element(
     match el.name.to_ascii_lowercase().as_str() {
         "svg" | "g" | "symbol" => {
             for child in el.child_elements() {
-                render_element(child, ctx, &style, &transform);
+                render_element(
+                    child,
+                    ctx,
+                    &style,
+                    &transform,
+                    gradients,
+                    id_elements,
+                    use_depth,
+                );
             }
         }
         "defs" => {
             // Definitions are not rendered directly (gradient defs etc.)
         }
-        "rect" => render_rect(el, ctx, &style, &transform),
-        "circle" => render_circle(el, ctx, &style, &transform),
-        "ellipse" => render_ellipse(el, ctx, &style, &transform),
-        "line" => render_line(el, ctx, &style, &transform),
-        "polyline" => render_polyline(el, ctx, &style, &transform, false),
-        "polygon" => render_polyline(el, ctx, &style, &transform, true),
-        "path" => render_path(el, ctx, &style, &transform),
+        "rect" => render_rect(el, ctx, &style, &transform, gradients),
+        "circle" => render_circle(el, ctx, &style, &transform, gradients),
+        "ellipse" => render_ellipse(el, ctx, &style, &transform, gradients),
+        "line" => render_line(el, ctx, &style, &transform, gradients),
+        "polyline" => render_polyline(el, ctx, &style, &transform, false, gradients),
+        "polygon" => render_polyline(el, ctx, &style, &transform, true, gradients),
+        "path" => render_path(el, ctx, &style, &transform, gradients),
         "use" => {
-            // <use> is not yet supported
+            if use_depth <= 32 {
+                if let Some(href_id) = parse_use_href(el) {
+                    if let Some(target) = id_elements.get(&href_id) {
+                        let x = el.attr_f64("x").unwrap_or(0.0);
+                        let y = el.attr_f64("y").unwrap_or(0.0);
+                        let use_transform = transform.concat(&Transform::translate(x, y));
+                        render_element(
+                            target,
+                            ctx,
+                            &style,
+                            &use_transform,
+                            gradients,
+                            id_elements,
+                            use_depth + 1,
+                        );
+                    }
+                }
+            }
         }
         _ => {
             // Unknown element – recurse in case it wraps known children
             for child in el.child_elements() {
-                render_element(child, ctx, &style, &transform);
+                render_element(
+                    child,
+                    ctx,
+                    &style,
+                    &transform,
+                    gradients,
+                    id_elements,
+                    use_depth,
+                );
             }
         }
     }
@@ -1430,14 +1710,17 @@ fn paint_subpaths(
     ctx: &mut Context2D,
     style: &SvgStyle,
     close_for_fill: bool,
+    gradients: &HashMap<String, SvgLinearGradientDef>,
 ) {
     if sub_paths.is_empty() {
         return;
     }
 
     // Fill
-    if let Some(fill_color) = style.effective_fill() {
-        ctx.set_fill_style(&color_to_css(fill_color));
+    if let Some(fill_paint) = style.effective_fill() {
+        if !apply_fill_paint(ctx, sub_paths, &fill_paint, style, gradients) {
+            return;
+        }
         ctx.begin_path();
         for pts in sub_paths {
             if pts.is_empty() {
@@ -1455,24 +1738,197 @@ fn paint_subpaths(
     }
 
     // Stroke
-    if let Some(stroke_color) = style.effective_stroke() {
+    if let Some(stroke_paint) = style.effective_stroke() {
         let sw = style.effective_stroke_width();
-        ctx.set_stroke_style(&color_to_css(stroke_color));
+        if !apply_stroke_paint(ctx, sub_paths, &stroke_paint, style, gradients) {
+            return;
+        }
         ctx.set_line_width(sw);
         if let Some(cap) = &style.stroke_linecap {
             ctx.set_line_cap(cap);
         }
-        ctx.begin_path();
-        for pts in sub_paths {
-            if pts.is_empty() {
-                continue;
+        if let Some(dash_pattern) = style.effective_stroke_dasharray() {
+            for pts in sub_paths {
+                if pts.len() < 2 {
+                    continue;
+                }
+                let segments = dash_polyline_segments(pts, &dash_pattern);
+                for ((x0, y0), (x1, y1)) in segments {
+                    ctx.begin_path();
+                    ctx.move_to(x0, y0);
+                    ctx.line_to(x1, y1);
+                    ctx.stroke();
+                }
             }
-            ctx.move_to(pts[0].0, pts[0].1);
-            for &(x, y) in &pts[1..] {
-                ctx.line_to(x, y);
+        } else {
+            ctx.begin_path();
+            for pts in sub_paths {
+                if pts.is_empty() {
+                    continue;
+                }
+                ctx.move_to(pts[0].0, pts[0].1);
+                for &(x, y) in &pts[1..] {
+                    ctx.line_to(x, y);
+                }
+            }
+            ctx.stroke();
+        }
+    }
+}
+
+fn dash_polyline_segments(
+    pts: &[(f64, f64)],
+    pattern: &[f64],
+) -> Vec<((f64, f64), (f64, f64))> {
+    if pts.len() < 2 || pattern.is_empty() {
+        return Vec::new();
+    }
+
+    let mut result = Vec::new();
+    let mut dash_idx = 0usize;
+    let mut dash_remaining = pattern[0];
+    let mut draw_phase = true;
+
+    for pair in pts.windows(2) {
+        let (x0, y0) = pair[0];
+        let (x1, y1) = pair[1];
+        let dx = x1 - x0;
+        let dy = y1 - y0;
+        let seg_len = (dx * dx + dy * dy).sqrt();
+        if seg_len <= 1e-9 {
+            continue;
+        }
+
+        let mut consumed = 0.0;
+        while consumed < seg_len - 1e-9 {
+            let step = dash_remaining.min(seg_len - consumed);
+            let t0 = consumed / seg_len;
+            let t1 = (consumed + step) / seg_len;
+            let sx = x0 + dx * t0;
+            let sy = y0 + dy * t0;
+            let ex = x0 + dx * t1;
+            let ey = y0 + dy * t1;
+
+            if draw_phase {
+                result.push(((sx, sy), (ex, ey)));
+            }
+
+            consumed += step;
+            dash_remaining -= step;
+
+            if dash_remaining <= 1e-9 {
+                dash_idx = (dash_idx + 1) % pattern.len();
+                dash_remaining = pattern[dash_idx];
+                draw_phase = !draw_phase;
             }
         }
-        ctx.stroke();
+    }
+
+    result
+}
+
+fn subpaths_bbox(sub_paths: &[Vec<(f64, f64)>]) -> Option<(f64, f64, f64, f64)> {
+    let mut min_x = f64::INFINITY;
+    let mut min_y = f64::INFINITY;
+    let mut max_x = f64::NEG_INFINITY;
+    let mut max_y = f64::NEG_INFINITY;
+
+    for pts in sub_paths {
+        for &(x, y) in pts {
+            min_x = min_x.min(x);
+            min_y = min_y.min(y);
+            max_x = max_x.max(x);
+            max_y = max_y.max(y);
+        }
+    }
+
+    if min_x.is_finite() && min_y.is_finite() && max_x.is_finite() && max_y.is_finite() {
+        Some((min_x, min_y, max_x, max_y))
+    } else {
+        None
+    }
+}
+
+fn build_linear_gradient(
+    def: &SvgLinearGradientDef,
+    sub_paths: &[Vec<(f64, f64)>],
+    opacity: f64,
+    ctx: &Context2D,
+) -> Option<LinearGradient> {
+    if def.stops.is_empty() {
+        return None;
+    }
+
+    let (x0, y0, x1, y1) = match def.units {
+        GradientUnits::UserSpaceOnUse => (def.x1, def.y1, def.x2, def.y2),
+        GradientUnits::ObjectBoundingBox => {
+            let (min_x, min_y, max_x, max_y) = subpaths_bbox(sub_paths)?;
+            let width = (max_x - min_x).max(0.0);
+            let height = (max_y - min_y).max(0.0);
+            (
+                min_x + def.x1 * width,
+                min_y + def.y1 * height,
+                min_x + def.x2 * width,
+                min_y + def.y2 * height,
+            )
+        }
+    };
+
+    let mut gradient = ctx.create_linear_gradient(x0, y0, x1, y1);
+    for (offset, color) in &def.stops {
+        let mut c = *color;
+        let alpha = (c.a as f64 / 255.0 * opacity).clamp(0.0, 1.0);
+        c.a = (alpha * 255.0).round() as u8;
+        gradient.add_color_stop(*offset, &color_to_css(c));
+    }
+    Some(gradient)
+}
+
+fn apply_fill_paint(
+    ctx: &mut Context2D,
+    sub_paths: &[Vec<(f64, f64)>],
+    paint: &SvgPaint,
+    style: &SvgStyle,
+    gradients: &HashMap<String, SvgLinearGradientDef>,
+) -> bool {
+    match paint {
+        SvgPaint::Color(c) => {
+            ctx.set_fill_style(&color_to_css(*c));
+            true
+        }
+        SvgPaint::Ref(id) => {
+            if let Some(def) = gradients.get(id) {
+                if let Some(gradient) = build_linear_gradient(def, sub_paths, style.fill_opacity_factor(), ctx) {
+                    ctx.set_fill_style_gradient(&gradient);
+                    return true;
+                }
+            }
+            false
+        }
+    }
+}
+
+fn apply_stroke_paint(
+    ctx: &mut Context2D,
+    sub_paths: &[Vec<(f64, f64)>],
+    paint: &SvgPaint,
+    style: &SvgStyle,
+    gradients: &HashMap<String, SvgLinearGradientDef>,
+) -> bool {
+    match paint {
+        SvgPaint::Color(c) => {
+            ctx.set_stroke_style(&color_to_css(*c));
+            true
+        }
+        SvgPaint::Ref(id) => {
+            if let Some(def) = gradients.get(id) {
+                if let Some(gradient) = build_linear_gradient(def, sub_paths, style.stroke_opacity_factor(), ctx) {
+                    ctx.set_stroke_style_gradient(&gradient);
+                    return true;
+                }
+            }
+            false
+        }
     }
 }
 
@@ -1480,7 +1936,13 @@ fn color_to_css(c: Color) -> String {
     format!("rgba({},{},{},{})", c.r, c.g, c.b, c.a as f64 / 255.0)
 }
 
-fn render_rect(el: &XmlElement, ctx: &mut Context2D, style: &SvgStyle, tf: &Transform) {
+fn render_rect(
+    el: &XmlElement,
+    ctx: &mut Context2D,
+    style: &SvgStyle,
+    tf: &Transform,
+    gradients: &HashMap<String, SvgLinearGradientDef>,
+) {
     let x = el.attr_f64("x").unwrap_or(0.0);
     let y = el.attr_f64("y").unwrap_or(0.0);
     let w = el.attr_f64("width").unwrap_or(0.0);
@@ -1505,13 +1967,13 @@ fn render_rect(el: &XmlElement, ctx: &mut Context2D, style: &SvgStyle, tf: &Tran
         ];
         let tpts = transform_points(&pts, tf);
         let sub_paths = vec![tpts];
-        paint_subpaths(&sub_paths, ctx, style, true);
+        paint_subpaths(&sub_paths, ctx, style, true, gradients);
     } else {
         // Rounded rectangle – approximate with line segments
         let r = rx.min(ry);
         let flat = rounded_rect_flat(x, y, w, h, r);
         let sub_paths = flat_cmds_to_subpaths(&flat, tf);
-        paint_subpaths(&sub_paths, ctx, style, true);
+        paint_subpaths(&sub_paths, ctx, style, true, gradients);
     }
 }
 
@@ -1530,7 +1992,13 @@ fn rounded_rect_flat(x: f64, y: f64, w: f64, h: f64, r: f64) -> Vec<FlatCmd> {
     parse_svg_path(&d)
 }
 
-fn render_circle(el: &XmlElement, ctx: &mut Context2D, style: &SvgStyle, tf: &Transform) {
+fn render_circle(
+    el: &XmlElement,
+    ctx: &mut Context2D,
+    style: &SvgStyle,
+    tf: &Transform,
+    gradients: &HashMap<String, SvgLinearGradientDef>,
+) {
     let cx = el.attr_f64("cx").unwrap_or(0.0);
     let cy = el.attr_f64("cy").unwrap_or(0.0);
     let r = el.attr_f64("r").unwrap_or(0.0);
@@ -1539,7 +2007,7 @@ fn render_circle(el: &XmlElement, ctx: &mut Context2D, style: &SvgStyle, tf: &Tr
     }
     let flat = circle_flat(cx, cy, r);
     let sub_paths = flat_cmds_to_subpaths(&flat, tf);
-    paint_subpaths(&sub_paths, ctx, style, true);
+    paint_subpaths(&sub_paths, ctx, style, true, gradients);
 }
 
 fn circle_flat(cx: f64, cy: f64, r: f64) -> Vec<FlatCmd> {
@@ -1555,7 +2023,13 @@ fn circle_flat(cx: f64, cy: f64, r: f64) -> Vec<FlatCmd> {
     parse_svg_path(&d)
 }
 
-fn render_ellipse(el: &XmlElement, ctx: &mut Context2D, style: &SvgStyle, tf: &Transform) {
+fn render_ellipse(
+    el: &XmlElement,
+    ctx: &mut Context2D,
+    style: &SvgStyle,
+    tf: &Transform,
+    gradients: &HashMap<String, SvgLinearGradientDef>,
+) {
     let cx = el.attr_f64("cx").unwrap_or(0.0);
     let cy = el.attr_f64("cy").unwrap_or(0.0);
     let rx = el.attr_f64("rx").unwrap_or(0.0);
@@ -1574,10 +2048,16 @@ fn render_ellipse(el: &XmlElement, ctx: &mut Context2D, style: &SvgStyle, tf: &T
     );
     let flat = parse_svg_path(&d);
     let sub_paths = flat_cmds_to_subpaths(&flat, tf);
-    paint_subpaths(&sub_paths, ctx, style, true);
+    paint_subpaths(&sub_paths, ctx, style, true, gradients);
 }
 
-fn render_line(el: &XmlElement, ctx: &mut Context2D, style: &SvgStyle, tf: &Transform) {
+fn render_line(
+    el: &XmlElement,
+    ctx: &mut Context2D,
+    style: &SvgStyle,
+    tf: &Transform,
+    gradients: &HashMap<String, SvgLinearGradientDef>,
+) {
     let x1 = el.attr_f64("x1").unwrap_or(0.0);
     let y1 = el.attr_f64("y1").unwrap_or(0.0);
     let x2 = el.attr_f64("x2").unwrap_or(0.0);
@@ -1590,7 +2070,7 @@ fn render_line(el: &XmlElement, ctx: &mut Context2D, style: &SvgStyle, tf: &Tran
         fill: Some(None), // no fill for lines
         ..style.clone()
     };
-    paint_subpaths(&sub_paths, ctx, &line_style, false);
+    paint_subpaths(&sub_paths, ctx, &line_style, false, gradients);
 }
 
 fn render_polyline(
@@ -1599,6 +2079,7 @@ fn render_polyline(
     style: &SvgStyle,
     tf: &Transform,
     close: bool,
+    gradients: &HashMap<String, SvgLinearGradientDef>,
 ) {
     let pts_str = el.attr("points").unwrap_or("");
     let nums = parse_number_list(pts_str);
@@ -1611,17 +2092,23 @@ fn render_polyline(
     }
     let tpts = transform_points(&pts, tf);
     let sub_paths = vec![tpts];
-    paint_subpaths(&sub_paths, ctx, style, close);
+    paint_subpaths(&sub_paths, ctx, style, close, gradients);
 }
 
-fn render_path(el: &XmlElement, ctx: &mut Context2D, style: &SvgStyle, tf: &Transform) {
+fn render_path(
+    el: &XmlElement,
+    ctx: &mut Context2D,
+    style: &SvgStyle,
+    tf: &Transform,
+    gradients: &HashMap<String, SvgLinearGradientDef>,
+) {
     let d = el.attr("d").unwrap_or("");
     if d.is_empty() {
         return;
     }
     let flat = parse_svg_path(d);
     let sub_paths = flat_cmds_to_subpaths(&flat, tf);
-    paint_subpaths(&sub_paths, ctx, style, false);
+    paint_subpaths(&sub_paths, ctx, style, false, gradients);
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -1756,5 +2243,44 @@ mod tests {
         // Should have a MoveTo, two LineTos, and a ClosePath
         assert!(matches!(cmds[0], FlatCmd::MoveTo(10.0, 10.0)));
         assert!(matches!(cmds[1], FlatCmd::LineTo(x, _) if (x - 20.0).abs() < 1e-9));
+    }
+
+    #[test]
+    fn test_render_svg_use_href() {
+        let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40">
+            <defs>
+                <g id="dot"><circle cx="0" cy="0" r="5" fill="#ff0000"/></g>
+            </defs>
+            <use href="#dot" x="20" y="20"/>
+        </svg>"##;
+        let img = render_svg(svg.as_bytes(), 40, 40).unwrap();
+        let center = img.get_pixel(20, 20);
+        assert!(center.r > 200, "Expected red pixel from <use>, got {:?}", center);
+    }
+
+    #[test]
+    fn test_group_opacity_is_applied_to_children() {
+        let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20">
+            <g opacity="0.5">
+                <rect x="0" y="0" width="20" height="20" fill="#ff0000"/>
+            </g>
+        </svg>"##;
+        let img = render_svg(svg.as_bytes(), 20, 20).unwrap();
+        let px = img.get_pixel(10, 10);
+        assert!(px.r > 200, "Expected red color channel, got {:?}", px);
+        assert!(px.a < 200, "Expected reduced alpha from group opacity, got {:?}", px);
+    }
+
+    #[test]
+    fn test_render_svg_stroke_dasharray_on_path() {
+        let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="80" height="20">
+            <path d="M 0 10 L 80 10" fill="none" stroke="#ff0000" stroke-width="4" stroke-dasharray="8,8"/>
+        </svg>"##;
+        let img = render_svg(svg.as_bytes(), 80, 20).unwrap();
+
+        let on_px = img.get_pixel(4, 10);
+        let off_px = img.get_pixel(12, 10);
+        assert!(on_px.r > 200, "Expected red dash segment, got {:?}", on_px);
+        assert!(off_px.a < 10, "Expected transparent dash gap, got {:?}", off_px);
     }
 }
