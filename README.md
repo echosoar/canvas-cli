@@ -22,6 +22,14 @@ Engineering drawing: blue background with white text, dimensions, grid
 
 ![](./test/e-com.png)
 
+## SVG => PNG
+![](./test/svg.png)
+
+```sh
+canvas-cli --input=bicycle.svg --output=bicycle.png
+```
+
+
 ## Anti-aliasing
 
 支持抗锯齿，可以渲染出来更平滑的线条和文字

@@ -8,11 +8,12 @@ fn print_usage() {
     println!();
     println!("Usage:");
     println!("  canvas-cli --input=<input.txt> --output=<output.png>");
+    println!("  canvas-cli --input=<input.svg> --output=<output.png>");
     println!("  canvas-cli --input=\"canvas 1080 200; [operation] [args...]\" --output=<output.png>");
     println!("  canvas-cli --input=<input.txt> --output-data-url");
     println!();
     println!("Options:");
-    println!("  --input=<path_or_commands>  - Input file path or inline commands");
+    println!("  --input=<path_or_commands>  - Input file path (.txt command file, .svg, or inline commands)");
     println!("  --output=<path>            - Output PNG file path");
     println!("  --output-data-url          - Output as data URL string instead of file");
     println!();
@@ -24,6 +25,8 @@ fn print_usage() {
     println!("  draw_image <path> <dx> <dy>                                       - Draw an image at (dx, dy) at natural size");
     println!("  draw_image <path> <dx> <dy> <dw> <dh>                            - Draw an image scaled to (dw, dh)");
     println!("  draw_image <path> <sx> <sy> <sw> <sh> <dx> <dy> <dw> <dh>       - Draw a sub-region of an image scaled to (dw, dh)");
+    println!("  draw_svg <path> <dx> <dy>                                         - Draw an SVG at (dx, dy) at its intrinsic size");
+    println!("  draw_svg <path> <dx> <dy> <dw> <dh>                              - Draw an SVG scaled to (dw, dh)");
     println!("  set_fill_style <color>            - Set fill style (e.g., red, #ff0000, rgb(255,0,0))");
     println!("  set_stroke_style <color>          - Set stroke style");
     println!("  set_font <size>px <family>        - Set font (e.g., 32px common)");
@@ -235,6 +238,36 @@ fn execute_commands(ctx: &mut canvas::Context2D, commands: &[String], base_path:
                         }
                     } else {
                         eprintln!("Warning: Failed to read image: {}", image_path);
+                    }
+                }
+            }
+            "draw_svg" => {
+                // Supported forms:
+                //   draw_svg <path> <dx> <dy>
+                //   draw_svg <path> <dx> <dy> <dw> <dh>
+                if parts.len() >= 4 {
+                    let svg_path = parts[1];
+
+                    // Resolve path relative to input file
+                    let resolved = if Path::new(svg_path).is_absolute() {
+                        svg_path.to_string()
+                    } else {
+                        base_path.join(svg_path).to_string_lossy().to_string()
+                    };
+
+                    match fs::read(&resolved) {
+                        Ok(svg_bytes) => {
+                            let dx = parse_float(parts[2]);
+                            let dy = parse_float(parts[3]);
+                            let dw = if parts.len() >= 5 { parse_u32(parts[4]) } else { 0 };
+                            let dh = if parts.len() >= 6 { parse_u32(parts[5]) } else { 0 };
+                            if !canvas::draw_svg(ctx, &svg_bytes, dx, dy, dw, dh) {
+                                eprintln!("Warning: Failed to render SVG: {}", resolved);
+                            }
+                        }
+                        Err(_) => {
+                            eprintln!("Warning: Failed to read SVG file: {}", resolved);
+                        }
                     }
                 }
             }
@@ -453,10 +486,39 @@ fn main() {
 
     // Check if input is a file path or inline commands
     let (commands, base_path): (Vec<String>, std::path::PathBuf) = if Path::new(&input).exists() {
-        // Read from file
-        let content = fs::read_to_string(&input).expect("Failed to read input file");
+        let input_path = Path::new(&input);
+
+        // If the input file is an SVG, render it directly and exit
+        if input_path
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|e| e.eq_ignore_ascii_case("svg"))
+            .unwrap_or(false)
+        {
+            let svg_bytes = fs::read(input_path).expect("Failed to read SVG file");
+            let img = canvas::render_svg(&svg_bytes, 0, 0)
+                .unwrap_or_else(|| {
+                    eprintln!("Error: Failed to parse/render SVG file");
+                    std::process::exit(1);
+                });
+            let canvas = Canvas::new(img.width, img.height);
+            let mut ctx = canvas.get_context("2d").expect("Failed to get 2d context");
+            ctx.draw_image(&img, 0.0, 0.0);
+            let png_bytes = images::to_blob(&canvas);
+            if output_data_url {
+                let base64 = base64_encode(&png_bytes);
+                println!("data:image/png;base64,{}", base64);
+            } else if let Some(output_path) = output {
+                fs::write(&output_path, &png_bytes).expect("Failed to write output file");
+                println!("Output saved to: {}", output_path);
+            }
+            return;
+        }
+
+        // Read from command file
+        let content = fs::read_to_string(input_path).expect("Failed to read input file");
         let cmds: Vec<String> = content.lines().map(|s| s.to_string()).collect();
-        let base_path = Path::new(&input).parent().unwrap_or(Path::new("."));
+        let base_path = input_path.parent().unwrap_or(Path::new("."));
         (cmds, base_path.to_path_buf())
     } else {
         // Parse inline commands (separated by semicolons)
